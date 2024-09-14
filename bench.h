@@ -136,4 +136,5 @@ uint64_t now_micros(void);
 bool starts_with(const char*, const char*);
 char* trim_space(const char*);
 
+void set_pragma_encoding(const char*);
 #endif /* BENCH_H_ */

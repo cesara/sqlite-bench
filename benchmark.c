@@ -244,6 +244,99 @@ void benchmark_fini() {
   error_check(status);
 }
 
+static void benchmark_sort_utf8(void) {
+  int status;
+  char *err_msg = NULL;
+  sqlite3_stmt *insert_stmt, *select_stmt;
+
+  // Create a table for UTF-8 test
+  status = sqlite3_exec(db_, "CREATE TABLE test_utf8 (value TEXT COLLATE NOCASE)", NULL, NULL, &err_msg);
+  exec_error_check(status, err_msg);
+
+  // Prepare statements
+  status = sqlite3_prepare_v2(db_, "INSERT INTO test_utf8 (value) VALUES (?)", -1, &insert_stmt, NULL);
+  error_check(status);
+  status = sqlite3_prepare_v2(db_, "SELECT value FROM test_utf8 ORDER BY value", -1, &select_stmt, NULL);
+  error_check(status);
+
+  // Insert ASCII characters
+  for (char c = 32; c <= 126; c++) {
+    char str[2] = {c, '\0'};
+    status = sqlite3_bind_text(insert_stmt, 1, str, -1, SQLITE_STATIC);
+    error_check(status);
+    status = sqlite3_step(insert_stmt);
+    step_error_check(status);
+    status = sqlite3_reset(insert_stmt);
+    error_check(status);
+  }
+
+  // Measure time to sort and retrieve
+  start();
+  while (sqlite3_step(select_stmt) == SQLITE_ROW) {
+    finished_single_op();
+  }
+  
+  // Clean up
+  sqlite3_finalize(insert_stmt);
+  sqlite3_finalize(select_stmt);
+  sqlite3_exec(db_, "DROP TABLE test_utf8", NULL, NULL, NULL);
+}
+
+static void benchmark_sort_utf16(void) {
+  int status;
+  char *err_msg = NULL;
+  sqlite3_stmt *insert_stmt, *select_stmt;
+  set_pragma_encoding(db_);
+
+  // verify that the encoding is set to UTF-16
+  // char* encoding = malloc(sizeof(char) * 100);
+
+  // Create a table for UTF-16 test
+  status = sqlite3_exec(db_, "CREATE TABLE test_utf16 (value TEXT COLLATE NOCASE)", NULL, NULL, &err_msg);
+  exec_error_check(status, err_msg);
+
+  // Prepare statements
+  status = sqlite3_prepare_v2(db_, "INSERT INTO test_utf16 (value) VALUES (?)", -1, &insert_stmt, NULL);
+  error_check(status);
+  status = sqlite3_prepare_v2(db_, "SELECT value FROM test_utf16 ORDER BY value", -1, &select_stmt, NULL);
+  error_check(status);
+
+  // Insert ASCII characters
+  for (unsigned short c = 32; c <= 126; c++) {
+    unsigned short str[2] = {c, 0};
+    status = sqlite3_bind_text16(insert_stmt, 1, str, -1, SQLITE_STATIC);
+    error_check(status);
+    status = sqlite3_step(insert_stmt);
+    step_error_check(status);
+    status = sqlite3_reset(insert_stmt);
+    error_check(status);
+  }
+
+  // status = sqlite3_exec(db_, "PRAGMA encoding", NULL, &encoding, &err_msg);
+  // if (status != SQLITE_OK) {
+  //   fprintf(stderr, "Error getting encoding: %s\n", err_msg);
+  //   exit(1);
+  // }
+  // if (strcmp(encoding, "UTF-16")) {
+  //   // print the encoding
+  //   fprintf(stderr, "Encoding is %s\n", encoding);
+  //   fprintf(stderr, "Encoding is not UTF-16\n");
+  //   exit(1);
+  // }
+
+  // Measure time to sort and retrieve
+  start();
+
+  
+  while (sqlite3_step(select_stmt) == SQLITE_ROW) {}
+  
+    finished_single_op();
+  // Clean up
+  sqlite3_finalize(insert_stmt);
+  sqlite3_finalize(select_stmt);
+  sqlite3_exec(db_, "DROP TABLE test_utf16", NULL, NULL, NULL);
+}
+
 void benchmark_run() {
   print_header();
   benchmark_open();
@@ -305,6 +398,10 @@ void benchmark_run() {
       reads_ /= 1000;
       benchmark_read(RANDOM, 1);
       reads_ = n;
+    } else if (!strcmp(name, "sortutf8")) {
+      benchmark_sort_utf8();
+    } else if (!strcmp(name, "sortutf16")) {
+      benchmark_sort_utf16();
     } else {
       known = false;
       if (strcmp(name, "")) {
@@ -331,7 +428,7 @@ void benchmark_open() {
             "%sdbbench_sqlite3-%d.db",
             tmp_dir,
             db_num_);
-  status = sqlite3_open(file_name, &db_);
+  status = sqlite3_open16(file_name, &db_);
   if (status) {
     fprintf(stderr, "open error: %s\n", sqlite3_errmsg(db_));
     exit(1);

@@ -61,6 +61,9 @@ bool FLAGS_WAL_enabled;
 // Use the db with the following name.
 char* FLAGS_db;
 
+// New flag for PRAGMA UTF-16 encoding
+bool FLAGS_PRAGMA_UTF16;
+
 void init() {
   // Comma-separated list of operations to run in the specified order
   //   Actual benchmarks:
@@ -92,6 +95,8 @@ void init() {
     "fillseq100K,"
     "readseq,"
     "readrand100K,"
+    "sortutf8,"
+    "sortutf16,"
     ;
   FLAGS_num = 1000000;
   FLAGS_reads = -1;
@@ -105,6 +110,7 @@ void init() {
   FLAGS_transaction = true;
   FLAGS_WAL_enabled = true;
   FLAGS_db = NULL;
+  FLAGS_PRAGMA_UTF16 = false;  // Default to false
 }
 
 void print_usage(const char* argv0) {
@@ -124,6 +130,7 @@ void print_usage(const char* argv0) {
   fprintf(stderr, "  --num_pages=INT\t\tnumber of pages\n");
   fprintf(stderr, "  --WAL_enabled={0,1}\t\tenable WAL\n");
   fprintf(stderr, "  --db=PATH\t\t\tpath to location databases are created\n");
+  fprintf(stderr, "  --PRAGMA_UTF16={0,1}\t\tset PRAGMA encoding to UTF-16\n");
   fprintf(stderr, "  --help\t\t\tshow this help\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "[BENCH]\n");
@@ -140,6 +147,22 @@ void print_usage(const char* argv0) {
   fprintf(stderr, "  readrandom\tread N times in random order\n");
   fprintf(stderr, "  readrand100K\tread N/1000 100K values in sequential order in async mode\n");
 
+}
+
+void set_pragma_encoding(const char* db_path) {
+  if (FLAGS_PRAGMA_UTF16) {
+    sqlite3* db;
+    int rc = sqlite3_open16(db_path, &db);
+    if (rc) {
+      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+      exit(1);
+    }
+    rc = sqlite3_exec(db, "PRAGMA encoding = 'UTF-16'", NULL, NULL, NULL);
+    if (rc != SQLITE_OK) {
+      fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+    }
+  }
 }
 
 int main(int argc, char** argv) {
@@ -180,6 +203,9 @@ int main(int argc, char** argv) {
     } else if (sscanf(argv[i], "--WAL_enabled=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       FLAGS_WAL_enabled = n;
+    } else if (sscanf(argv[i], "--PRAGMA_UTF16=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      FLAGS_PRAGMA_UTF16 = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
     } else if (!strcmp(argv[i], "--help")) {
@@ -196,6 +222,7 @@ int main(int argc, char** argv) {
       FLAGS_db = default_db_path;
 
   benchmark_init();
+  
   benchmark_run();
   benchmark_fini();
 
